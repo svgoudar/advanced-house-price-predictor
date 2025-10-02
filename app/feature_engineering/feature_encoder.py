@@ -1,8 +1,10 @@
 import pandas as pd
-from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OrdinalEncoder, OneHotEncoder
 from sklearn.pipeline import Pipeline, make_pipeline
-from category_encoders import TargetEncoder
+import pandas as pd
+import numpy as np
+from sklearn.base import BaseEstimator, TransformerMixin
+
 
 # -----------------------------
 # 1) Feature Groups
@@ -79,10 +81,6 @@ def decode_make_pipeline(pipeline, feature, encoded_value):
         raise ValueError(f"Encoded value {encoded_value} out-of-range for '{feature}'.")
 
     return le.inverse_transform([encoded_value])[0]
-
-
-from sklearn.base import BaseEstimator, TransformerMixin
-from category_encoders import TargetEncoder
 
 
 class OrdinalEncoderDF(BaseEstimator, TransformerMixin):
@@ -162,11 +160,6 @@ class OneHotEncoderDF(BaseEstimator, TransformerMixin):
 # -------------------------
 # 3. Target Encoder Wrapper
 # -------------------------
-import pandas as pd
-import numpy as np
-from sklearn.base import BaseEstimator, TransformerMixin
-
-
 class DataFrameTargetEncoder(BaseEstimator, TransformerMixin):
     """
     Target Encoder for regression. Compatible with sklearn pipelines.
@@ -181,12 +174,18 @@ class DataFrameTargetEncoder(BaseEstimator, TransformerMixin):
         self.global_mean_ = None
 
     def fit(self, X):
+        self.cols_ = self.cols or X.select_dtypes(include="object").columns.tolist()
         if not isinstance(X, pd.DataFrame):
             raise ValueError("X must be a pandas DataFrame.")
         if self.target is None:
             raise ValueError("y must be provided.")
-        y = X[self.target]
-        self.cols_ = self.cols or X.select_dtypes(include="object").columns.tolist()
+        # if self.use_mapping:
+        print("COLLL ", X.columns)
+        if self.target in X.columns:
+            y = X[self.target]
+        else:
+            return self
+
         self.global_mean_ = y.mean()
 
         for col in self.cols_:
@@ -206,9 +205,7 @@ class DataFrameTargetEncoder(BaseEstimator, TransformerMixin):
 
         X_new = X.copy()
         for col in self.cols_:
-            X_new[col + "_encoded"] = (
-                X_new[col].map(self.mapping_[col]).fillna(self.global_mean_)
-            )
+            X_new[col] = X_new[col].map(self.mapping_[col]).fillna(self.global_mean_)
         return X_new
 
 
@@ -217,6 +214,7 @@ def create_encoder_pipeline(
     ordinal_features,
     low_cardinal_nominal_features,
     high_cardinal_nominal_features,
+    target,
 ):
 
     pipe = Pipeline(
@@ -225,34 +223,9 @@ def create_encoder_pipeline(
             ("low_card_ohe", OneHotEncoderDF(low_cardinal_nominal_features)),
             (
                 "high_card_target",
-                DataFrameTargetEncoder(
-                    high_cardinal_nominal_features, target="SalePrice"
-                ),
+                DataFrameTargetEncoder(high_cardinal_nominal_features, target=target),
             ),
         ]
     )
 
     return pipe
-
-
-# from feature_engineering.feature_encoder import create_encoder_pipeline
-
-# ordinal_features = ["ExterQual", "BsmtQual", "KitchenQual", "GarageFinish"]
-# ordinal_categories = [
-#     ["Po", "Fa", "TA", "Gd", "Ex"],  # ExterQual
-#     ["NA", "Po", "Fa", "TA", "Gd", "Ex"],  # BsmtQual
-#     ["Po", "Fa", "TA", "Gd", "Ex"],  # KitchenQual
-#     ["NA", "Unf", "RFn", "Fin"],  # GarageFinish
-# ]
-# high_cardinal_nominal_features = ["Neighborhood"]
-# low_cardinal_nominal_features = ["Foundation"]
-
-# encoder = create_encoder_pipeline(
-#     ordinal_categories,
-#     ordinal_categories,
-#     low_cardinal_nominal_features,
-#     high_cardinal_nominal_features,
-# )
-
-# pipe = Pipeline([("encoder", encoder)])
-# df_encoded = pipe.fit_transform(df)

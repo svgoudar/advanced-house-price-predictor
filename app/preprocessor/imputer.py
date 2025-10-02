@@ -163,15 +163,24 @@ class Preprocessor(
     BaseEstimator,
     TransformerMixin,
 ):
-    def __init__(self, cardinality_threshold=10, skew_threshold=0.5, sparse_columns=[]):
+    def __init__(
+        self,
+        cardinality_threshold=10,
+        skew_threshold=0.5,
+        sparse_columns=[],
+        retain_columns=[],
+    ):
         self.cardinality_threshold = cardinality_threshold
         self.skew_threshold = skew_threshold
         self.sparse_columns = sparse_columns
+        self.retain_columns = retain_columns
 
     def fit(self, X, y=None):
         """Fit the preprocessor to the training data"""
-        if self.sparse_columns:
+        if self.sparse_columns and self.sparse_columns in X.columns.to_list():
             X.drop(columns=self.sparse_columns, inplace=True, axis=1)
+        if self.retain_columns:
+            X = X[self.retain_columns]
 
         if not isinstance(X, pd.DataFrame):
             raise ValueError("Input must be a pandas DataFrame")
@@ -231,11 +240,12 @@ class Preprocessor(
                 X.loc[:, X_transformed_df.columns].dtypes.to_dict()
             )
             print(f"✅ Successfully transformed to DataFrame: {X_transformed_df.shape}")
+            print(f"SANJEEV: {self.__class__.__name__}")
+            print(X_transformed_df.columns.to_list())
             return X_transformed_df
 
         except Exception as e:
             print(f"❌ Error creating DataFrame: {e}")
-            print(f"Returning numpy array instead")
             return X_transformed
 
     def get_feature_names_out(self):
